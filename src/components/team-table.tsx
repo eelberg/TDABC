@@ -2,6 +2,7 @@
 
 import { useAbc } from "@/lib/abc-context";
 import { formatEuro } from "@/lib/format";
+import { es } from "@/lib/i18n/es";
 import type { BuId, PersonnelType } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,10 +30,10 @@ export function TeamTable() {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Home BU</TableHead>
-              <TableHead className="text-right">Monthly cost</TableHead>
+              <TableHead>{es.team.columns.name}</TableHead>
+              <TableHead>{es.team.columns.type}</TableHead>
+              <TableHead>{es.team.columns.homeBu}</TableHead>
+              <TableHead className="text-right">{es.team.columns.monthlyCost}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -101,9 +102,7 @@ export function TeamTable() {
           </TableBody>
         </Table>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Personnel cost drives TDABC: changes here flow immediately to time allocation and the P&amp;L.
-      </p>
+      <p className="text-sm text-muted-foreground">{es.team.footnote}</p>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { AbcProvider } from "@/lib/abc-context";
+import { Providers } from "@/components/providers";
+import { es } from "@/lib/i18n/es";
 
 import "./globals.css";
 
@@ -16,9 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TVUP · TDABC",
-  description:
-    "Time-driven activity-based costing MVP for TVUP business units (TVaaS, TCS, Tivify).",
+  title: es.meta.title,
+  description: es.meta.description,
 };
 
 export default function RootLayout({
@@ -28,11 +28,11 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
-        <AbcProvider>{children}</AbcProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useAbc } from "@/lib/abc-context";
+import { es } from "@/lib/i18n/es";
 import type { BuId } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,15 +23,12 @@ export function DriversTable() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Operational drivers split the indirect cost pool across business units. Multiple
-        drivers are averaged so each contributes equally to the allocation weights.
-      </p>
+      <p className="text-sm text-muted-foreground">{es.drivers.intro}</p>
       <div className="rounded-xl border border-border bg-card p-1 shadow-sm">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="min-w-[200px]">Driver</TableHead>
+              <TableHead className="min-w-[200px]">{es.drivers.columnDriver}</TableHead>
               {state.businessUnits.map((bu) => (
                 <TableHead key={bu.id} className="text-right">
                   {bu.shortLabel}

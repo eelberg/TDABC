@@ -15,6 +15,7 @@ import {
 import { useAbc } from "@/lib/abc-context";
 import { runCostEngine } from "@/lib/cost-engine";
 import { formatEuro, formatEuroDetailed } from "@/lib/format";
+import { es } from "@/lib/i18n/es";
 import { BU_IDS } from "@/lib/types";
 import {
   Card,
@@ -39,6 +40,26 @@ function cellClass(rowKey: string, isTotal = false) {
   return "tabular-nums";
 }
 
+type PlRowKey = keyof typeof es.pl.rows;
+
+function plRowLabel(key: string): string {
+  if (key in es.pl.rows) {
+    return es.pl.rows[key as PlRowKey];
+  }
+  return key;
+}
+
+function segmentDisplayLabel(segmentKey: string, buLabels: Record<string, string>): string {
+  if (segmentKey === "indirect-pool") return es.pl.chart.indirectPool;
+  if (segmentKey === "unallocated") return es.pl.chart.unallocated;
+  if (segmentKey.startsWith("direct-")) {
+    const bu = segmentKey.slice("direct-".length);
+    const name = buLabels[bu] ?? bu;
+    return `${name} · ${es.pl.chart.directSuffix}`;
+  }
+  return segmentKey;
+}
+
 export function PlDashboard() {
   const { state } = useAbc();
 
@@ -55,11 +76,11 @@ export function PlDashboard() {
   const chartData = useMemo(
     () =>
       result.personnelChartSegments.map((s) => ({
-        label: s.label,
+        label: segmentDisplayLabel(s.key, buLabels),
         value: Math.round(s.value),
         kind: s.kind,
       })),
-    [result.personnelChartSegments],
+    [result.personnelChartSegments, buLabels],
   );
 
   const fillForKind = (kind: string) => {
@@ -73,53 +94,50 @@ export function PlDashboard() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total direct costs</CardDescription>
+            <CardDescription>{es.pl.kpi.totalDirect}</CardDescription>
             <CardTitle className="text-2xl tabular-nums">
               {formatEuro(result.totalDirectCosts)}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            Direct other + payroll on direct activities (by BU).
+            {es.pl.kpi.totalDirectHint}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total indirect pool</CardDescription>
+            <CardDescription>{es.pl.kpi.indirectPool}</CardDescription>
             <CardTitle className="text-2xl tabular-nums">
               {formatEuro(result.totalIndirectCosts)}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            Indirect other + payroll on indirect activities, then allocated by drivers.
+            {es.pl.kpi.indirectPoolHint}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Unallocated payroll</CardDescription>
+            <CardDescription>{es.pl.kpi.unallocatedPayroll}</CardDescription>
             <CardTitle className="text-2xl tabular-nums">
               {formatEuro(result.personnel.unallocatedPersonnelCost)}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            Time not assigned in the timesheet (below 100% allocation).
+            {es.pl.kpi.unallocatedPayrollHint}
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>P&amp;L and profitability</CardTitle>
-          <CardDescription>
-            Consolidated view: revenue, direct costs, gross margin, allocated indirect
-            costs, and real EBITDA — by business unit and group total.
-          </CardDescription>
+          <CardTitle>{es.pl.plCard.title}</CardTitle>
+          <CardDescription>{es.pl.plCard.description}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="min-w-[200px]">Line</TableHead>
-                <TableHead className="text-right">Total group</TableHead>
+                <TableHead className="min-w-[200px]">{es.pl.columns.line}</TableHead>
+                <TableHead className="text-right">{es.pl.columns.totalGroup}</TableHead>
                 {BU_IDS.map((id) => (
                   <TableHead key={id} className="text-right">
                     {buLabels[id]}
@@ -130,7 +148,7 @@ export function PlDashboard() {
             <TableBody>
               {result.plRows.map((row) => (
                 <TableRow key={row.key}>
-                  <TableCell className="font-medium">{row.label}</TableCell>
+                  <TableCell className="font-medium">{plRowLabel(row.key)}</TableCell>
                   <TableCell
                     className={`text-right ${cellClass(row.key, true)} ${
                       row.key === "ebitda" ? "text-foreground" : ""
@@ -153,7 +171,7 @@ export function PlDashboard() {
 
           {result.unassignedDirectOther > 0 ? (
             <p className="text-sm text-muted-foreground">
-              Direct other expenses without a BU are included in the group total only:{" "}
+              {es.pl.unassignedDirect}{" "}
               <span className="font-medium text-foreground">
                 {formatEuro(result.unassignedDirectOther)}
               </span>
@@ -165,17 +183,12 @@ export function PlDashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Personnel cost distribution</CardTitle>
-          <CardDescription>
-            Payroll routed through the timesheet: direct labor by BU, indirect labor
-            pool, and unallocated capacity.
-          </CardDescription>
+          <CardTitle>{es.pl.distribution.title}</CardTitle>
+          <CardDescription>{es.pl.distribution.description}</CardDescription>
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No personnel allocation to display yet.
-            </p>
+            <p className="text-sm text-muted-foreground">{es.pl.distribution.empty}</p>
           ) : (
             <div className="h-[320px] w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -226,21 +239,21 @@ export function PlDashboard() {
                 className="size-2.5 rounded-sm"
                 style={{ background: "var(--chart-2)" }}
               />
-              Direct (by BU)
+              {es.pl.distribution.legendDirect}
             </span>
             <span className="inline-flex items-center gap-2">
               <span
                 className="size-2.5 rounded-sm"
                 style={{ background: "var(--chart-3)" }}
               />
-              Indirect activities
+              {es.pl.distribution.legendIndirect}
             </span>
             <span className="inline-flex items-center gap-2">
               <span
                 className="size-2.5 rounded-sm"
                 style={{ background: "var(--muted-foreground)" }}
               />
-              Unallocated
+              {es.pl.distribution.legendUnallocated}
             </span>
           </div>
         </CardContent>

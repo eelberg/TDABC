@@ -5,6 +5,7 @@ import { MinusCircle, PlusCircle } from "lucide-react";
 
 import { useAbc } from "@/lib/abc-context";
 import { formatEuro } from "@/lib/format";
+import { es } from "@/lib/i18n/es";
 import type { BuId, TimeEntryLine } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,10 @@ export function TimeAllocator() {
     ? (person.monthlyCost * unallocatedPct) / 100
     : 0;
 
+  const unallocatedNote = es.time.unallocatedNote
+    .replace("{pct}", unallocatedPct.toFixed(0))
+    .replace("{amount}", formatEuro(unallocatedEuro));
+
   const updateRow = (index: number, patch: Partial<TimeEntryLine>) => {
     if (!effectivePersonId) return;
     let next = patchEntries(entries, index, patch);
@@ -107,13 +112,13 @@ export function TimeAllocator() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
-          <Label htmlFor="person">Person</Label>
+          <Label htmlFor="person">{es.time.person}</Label>
           <Select
             value={effectivePersonId}
             onValueChange={(v) => v && setPersonId(v)}
           >
             <SelectTrigger id="person" className="w-full min-w-[240px] sm:w-72">
-              <SelectValue placeholder="Select person" />
+              <SelectValue placeholder={es.time.selectPerson} />
             </SelectTrigger>
             <SelectContent>
               {state.personnel.map((p) => (
@@ -126,7 +131,7 @@ export function TimeAllocator() {
         </div>
         {person ? (
           <div className="text-sm text-muted-foreground">
-            Monthly cost{" "}
+            {es.time.monthlyCost}{" "}
             <span className="font-medium text-foreground">
               {formatEuro(person.monthlyCost)}
             </span>
@@ -136,24 +141,20 @@ export function TimeAllocator() {
 
       <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-medium">Month allocation</span>
+          <span className="text-sm font-medium">{es.time.monthAllocation}</span>
           <span
             className={`text-sm tabular-nums ${overAllocated ? "text-destructive" : "text-muted-foreground"}`}
           >
-            {sumPct.toFixed(0)}% of time
-            {overAllocated ? " · over 100%" : ""}
+            {sumPct.toFixed(0)}% {es.time.percentOfTime}
+            {overAllocated ? ` · ${es.time.over100}` : ""}
           </span>
         </div>
         <Progress value={Math.min(sumPct, 100)} />
-        <p className="text-xs text-muted-foreground">
-          Unallocated: {unallocatedPct.toFixed(0)}% (
-          {formatEuro(unallocatedEuro)}) — not counted toward direct or indirect
-          payroll until assigned.
-        </p>
+        <p className="text-xs text-muted-foreground">{unallocatedNote}</p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-foreground">Allocation rows</h3>
+        <h3 className="text-sm font-medium text-foreground">{es.time.allocationRows}</h3>
         <Button
           type="button"
           variant="outline"
@@ -162,7 +163,7 @@ export function TimeAllocator() {
           disabled={!effectivePersonId}
         >
           <PlusCircle className="mr-1.5 size-4" />
-          Add row
+          {es.common.addRow}
         </Button>
       </div>
 
@@ -170,10 +171,10 @@ export function TimeAllocator() {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="min-w-[120px]">BU</TableHead>
-              <TableHead className="min-w-[200px]">Activity</TableHead>
-              <TableHead className="min-w-[160px]">Client</TableHead>
-              <TableHead className="w-28 text-right">%</TableHead>
+              <TableHead className="min-w-[120px]">{es.common.bu}</TableHead>
+              <TableHead className="min-w-[200px]">{es.time.columns.activity}</TableHead>
+              <TableHead className="min-w-[160px]">{es.time.columns.client}</TableHead>
+              <TableHead className="w-28 text-right">{es.time.columns.pct}</TableHead>
               <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
@@ -184,7 +185,7 @@ export function TimeAllocator() {
                   colSpan={5}
                   className="py-10 text-center text-sm text-muted-foreground"
                 >
-                  No rows yet. Add a row to allocate this person&apos;s time.
+                  {es.time.emptyRows}
                 </TableCell>
               </TableRow>
             ) : (
@@ -243,10 +244,10 @@ export function TimeAllocator() {
                         }}
                       >
                         <SelectTrigger size="sm" className="min-w-[140px]">
-                          <SelectValue placeholder="Optional" />
+                          <SelectValue placeholder={es.common.optional} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value={NO_CLIENT}>None</SelectItem>
+                          <SelectItem value={NO_CLIENT}>{es.common.none}</SelectItem>
                           {clientsHere.map((c) => (
                             <SelectItem key={c.id} value={c.id}>
                               {c.name}
@@ -280,7 +281,7 @@ export function TimeAllocator() {
                         size="icon-sm"
                         className="text-muted-foreground hover:text-destructive"
                         onClick={() => removeRow(index)}
-                        aria-label="Remove row"
+                        aria-label={es.common.removeRowAria}
                       >
                         <MinusCircle className="size-4" />
                       </Button>
@@ -294,10 +295,7 @@ export function TimeAllocator() {
       </div>
 
       {overAllocated ? (
-        <p className="text-sm text-destructive">
-          Total allocation exceeds 100%. The cost engine scales rows down proportionally
-          to 100% for calculations.
-        </p>
+        <p className="text-sm text-destructive">{es.time.overAllocatedWarning}</p>
       ) : null}
     </div>
   );
