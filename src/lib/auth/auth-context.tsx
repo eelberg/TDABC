@@ -18,12 +18,17 @@ import {
 } from "firebase/auth";
 
 import { isEmailDomainAllowed } from "@/lib/auth/allowed-domains";
+import { resolveSignInEmail } from "@/lib/auth/user-email";
 import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase/client";
 
 export type AuthErrorCode =
   | "domain"
   | "not_configured"
   | "popup_blocked"
+  | "popup_closed"
+  | "unauthorized_domain"
+  | "operation_not_allowed"
+  | "network"
   | "no_email"
   | "generic"
   | null;
@@ -42,6 +47,18 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 function mapFirebaseError(code: string | undefined): AuthErrorCode {
   if (code === "auth/popup-blocked" || code === "auth/cancelled-popup-request") {
     return "popup_blocked";
+  }
+  if (code === "auth/popup-closed-by-user") {
+    return "popup_closed";
+  }
+  if (code === "auth/unauthorized-domain") {
+    return "unauthorized_domain";
+  }
+  if (code === "auth/operation-not-allowed") {
+    return "operation_not_allowed";
+  }
+  if (code === "auth/network-request-failed") {
+    return "network";
   }
   return "generic";
 }
@@ -71,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const unsub = onAuthStateChanged(auth, async (next) => {
       if (next) {
-        const email = next.email;
+        const email = resolveSignInEmail(next);
         if (!email) {
           await signOut(auth);
           setUser(null);
@@ -116,6 +133,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         e && typeof e === "object" && "code" in e
           ? String((e as { code?: string }).code)
           : undefined;
+      if (process.env.NODE_ENV === "development") {
+        console.error("[auth] signInWithMicrosoft", code, e);
+      }
       setAuthError(mapFirebaseError(code));
     }
   }, []);

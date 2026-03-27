@@ -28,6 +28,13 @@ export const es = {
         "Solo se permiten cuentas @tvup.media o @thechannelstore.tv. Se ha cerrado la sesión.",
       popupBlocked:
         "El navegador bloqueó la ventana emergente. Permite ventanas emergentes para este sitio e inténtalo de nuevo.",
+      popupClosed: "Se cerró la ventana de inicio de sesión antes de terminar. Inténtalo de nuevo.",
+      unauthorizedDomain:
+        "Firebase no autoriza este dominio. En Firebase Console → Authentication → Settings → Authorized domains, añade el host exacto de la URL (p. ej. tdabc.vercel.app o tu dominio).",
+      operationNotAllowed:
+        "El proveedor Microsoft no está habilitado en Firebase (Authentication → Sign-in method → Microsoft).",
+      network:
+        "Error de red al contactar con Firebase. Comprueba la conexión e inténtalo de nuevo.",
       generic: "No se pudo iniciar sesión. Inténtalo de nuevo.",
       noEmail:
         "No se pudo obtener el correo de la cuenta. Usa una cuenta Microsoft 365 con correo corporativo.",

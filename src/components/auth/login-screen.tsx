@@ -19,6 +19,14 @@ function errorMessage(code: AuthErrorCode): string | null {
       return es.auth.notConfigured;
     case "popup_blocked":
       return es.auth.errors.popupBlocked;
+    case "popup_closed":
+      return es.auth.errors.popupClosed;
+    case "unauthorized_domain":
+      return es.auth.errors.unauthorizedDomain;
+    case "operation_not_allowed":
+      return es.auth.errors.operationNotAllowed;
+    case "network":
+      return es.auth.errors.network;
     case "no_email":
       return es.auth.errors.noEmail;
     case "generic":
