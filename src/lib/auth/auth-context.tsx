@@ -10,8 +10,11 @@ import {
   type ReactNode,
 } from "react";
 import {
+  browserLocalPersistence,
+  getAdditionalUserInfo,
   getRedirectResult,
   onAuthStateChanged,
+  setPersistence,
   signInWithRedirect,
   signOut,
   type User,
@@ -92,6 +95,11 @@ function logAuthError(context: string, e: unknown) {
   console.error(`[auth] ${context}`, code ?? "(no code)", message ?? e);
 }
 
+type PendingIdpProfile = {
+  uid: string;
+  profile: Record<string, unknown> | null;
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const firebaseReady = isFirebaseConfigured();
 
@@ -117,46 +125,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
-
-    const unsubscribe = onAuthStateChanged(auth, async (next) => {
-      if (cancelled) return;
-
-      if (next) {
-        const email = await resolveSignInEmailAsync(next);
-        if (!email) {
-          console.warn("[auth] Sin email tras OAuth; revisa claims Microsoft / perfil.");
-          await signOut(auth);
-          if (!cancelled) {
-            setUser(null);
-            setAuthError("no_email");
-            setLoading(false);
-          }
-          return;
-        }
-        if (!isEmailDomainAllowed(email)) {
-          await signOut(auth);
-          if (!cancelled) {
-            setUser(null);
-            setAuthError("domain");
-            setLoading(false);
-          }
-          return;
-        }
-      }
-
-      if (!cancelled) {
-        setUser(next);
-        setLoading(false);
-      }
-    });
+    let unsubscribe: (() => void) | undefined;
 
     void (async () => {
       try {
-        await getRedirectResult(auth);
-        if (!cancelled) {
-          setAuthErrorDetail(null);
-          setAuthError(null);
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (e) {
+        logAuthError("setPersistence", e);
+      }
+      if (cancelled) return;
+
+      let pendingIdp: PendingIdpProfile | null = null;
+
+      try {
+        const result = await getRedirectResult(auth);
+        if (cancelled) return;
+        if (result) {
+          const extra = getAdditionalUserInfo(result);
+          pendingIdp = {
+            uid: result.user.uid,
+            profile: extra?.profile ?? null,
+          };
         }
+        setAuthErrorDetail(null);
+        setAuthError(null);
       } catch (e) {
         if (!cancelled) {
           const { code, message } = firebaseErrorMeta(e);
@@ -165,11 +157,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthError(mapFirebaseError(code, message));
         }
       }
+
+      if (cancelled) return;
+
+      unsubscribe = onAuthStateChanged(auth, async (next) => {
+        if (cancelled) return;
+
+        let idpProfile: Record<string, unknown> | null | undefined;
+        if (pendingIdp && next && next.uid === pendingIdp.uid) {
+          idpProfile = pendingIdp.profile;
+          pendingIdp = null;
+        }
+
+        if (next) {
+          const email = await resolveSignInEmailAsync(next, { idpProfile });
+          if (!email) {
+            console.warn("[auth] Sin email tras OAuth; revisa claims Microsoft / perfil.");
+            await signOut(auth);
+            if (!cancelled) {
+              setUser(null);
+              setAuthError("no_email");
+              setLoading(false);
+            }
+            return;
+          }
+          if (!isEmailDomainAllowed(email)) {
+            await signOut(auth);
+            if (!cancelled) {
+              setUser(null);
+              setAuthError("domain");
+              setLoading(false);
+            }
+            return;
+          }
+        }
+
+        if (!cancelled) {
+          setUser(next);
+          setLoading(false);
+        }
+      });
     })();
 
     return () => {
       cancelled = true;
-      unsubscribe();
+      unsubscribe?.();
     };
   }, [firebaseReady]);
 
@@ -184,6 +216,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) {
       setAuthError("not_configured");
       return;
+    }
+
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+    } catch (e) {
+      logAuthError("setPersistence (signIn)", e);
     }
 
     const provider = createMicrosoftOAuthProvider();

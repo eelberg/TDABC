@@ -12,12 +12,13 @@ export function createMicrosoftOAuthProvider(): OAuthProvider {
   provider.addScope("email");
 
   const tenantId = process.env.NEXT_PUBLIC_MICROSOFT_TENANT_ID?.trim();
-  const params: Record<string, string> = {
-    prompt: "select_account",
-  };
+  const params: Record<string, string> = {};
   if (tenantId) {
     params.tenant = tenantId;
   }
-  provider.setCustomParameters(params);
+  // No forzar `prompt=select_account`: en algunos tenants provoca bucle en la pantalla de Microsoft.
+  if (Object.keys(params).length > 0) {
+    provider.setCustomParameters(params);
+  }
   return provider;
 }
