@@ -10,14 +10,16 @@ import {
   type ReactNode,
 } from "react";
 import {
-  OAuthProvider,
+  getRedirectResult,
   onAuthStateChanged,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
   type User,
 } from "firebase/auth";
 
 import { isEmailDomainAllowed } from "@/lib/auth/allowed-domains";
+import { createMicrosoftOAuthProvider } from "@/lib/auth/microsoft-provider";
+import { formatFirebaseAuthError } from "@/lib/auth/firebase-auth-error";
 import { resolveSignInEmail } from "@/lib/auth/user-email";
 import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase/client";
 
@@ -29,6 +31,8 @@ export type AuthErrorCode =
   | "unauthorized_domain"
   | "operation_not_allowed"
   | "network"
+  | "invalid_credential"
+  | "oauth_client_id"
   | "no_email"
   | "generic"
   | null;
@@ -37,6 +41,8 @@ type AuthContextValue = {
   user: User | null;
   loading: boolean;
   authError: AuthErrorCode;
+  /** Mensaje crudo de Firebase (código + texto); copiar al informar incidencias. */
+  authErrorDetail: string | null;
   signInWithMicrosoft: () => Promise<void>;
   signOutUser: () => Promise<void>;
   clearAuthError: () => void;
@@ -44,7 +50,13 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function mapFirebaseError(code: string | undefined): AuthErrorCode {
+function firebaseErrorMeta(e: unknown): { code?: string; message?: string } {
+  if (!e || typeof e !== "object") return {};
+  const o = e as { code?: string; message?: string };
+  return { code: o.code, message: o.message };
+}
+
+function mapFirebaseError(code: string | undefined, message?: string): AuthErrorCode {
   if (code === "auth/popup-blocked" || code === "auth/cancelled-popup-request") {
     return "popup_blocked";
   }
@@ -60,7 +72,24 @@ function mapFirebaseError(code: string | undefined): AuthErrorCode {
   if (code === "auth/network-request-failed") {
     return "network";
   }
+  if (code === "auth/invalid-credential") {
+    return "invalid_credential";
+  }
+  if (code === "auth/invalid-oauth-client-id") {
+    return "oauth_client_id";
+  }
+  if (
+    message &&
+    /INVALID_IDP_RESPONSE|invalid.?idp|idp.?response/i.test(message)
+  ) {
+    return "invalid_credential";
+  }
   return "generic";
+}
+
+function logAuthError(context: string, e: unknown) {
+  const { code, message } = firebaseErrorMeta(e);
+  console.error(`[auth] ${context}`, code ?? "(no code)", message ?? e);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -71,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<AuthErrorCode>(() =>
     firebaseReady ? null : "not_configured",
   );
+  const [authErrorDetail, setAuthErrorDetail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!firebaseReady) {
@@ -86,33 +116,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsub = onAuthStateChanged(auth, async (next) => {
-      if (next) {
-        const email = resolveSignInEmail(next);
-        if (!email) {
-          await signOut(auth);
-          setUser(null);
-          setAuthError("no_email");
-          setLoading(false);
-          return;
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        await getRedirectResult(auth);
+        if (!cancelled) {
+          setAuthErrorDetail(null);
+          setAuthError(null);
         }
-        if (!isEmailDomainAllowed(email)) {
-          await signOut(auth);
-          setUser(null);
-          setAuthError("domain");
-          setLoading(false);
-          return;
+      } catch (e) {
+        if (!cancelled) {
+          const { code, message } = firebaseErrorMeta(e);
+          logAuthError("getRedirectResult", e);
+          setAuthErrorDetail(formatFirebaseAuthError(e));
+          setAuthError(mapFirebaseError(code, message));
         }
       }
-      setUser(next);
-      setLoading(false);
-    });
 
-    return () => unsub();
+      if (cancelled) return;
+
+      unsubscribe = onAuthStateChanged(auth, async (next) => {
+        if (next) {
+          const email = resolveSignInEmail(next);
+          if (!email) {
+            await signOut(auth);
+            setUser(null);
+            setAuthError("no_email");
+            setLoading(false);
+            return;
+          }
+          if (!isEmailDomainAllowed(email)) {
+            await signOut(auth);
+            setUser(null);
+            setAuthError("domain");
+            setLoading(false);
+            return;
+          }
+        }
+        setUser(next);
+        setLoading(false);
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, [firebaseReady]);
 
   const signInWithMicrosoft = useCallback(async () => {
     setAuthError(null);
+    setAuthErrorDetail(null);
     if (!isFirebaseConfigured()) {
       setAuthError("not_configured");
       return;
@@ -123,20 +179,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const provider = new OAuthProvider("microsoft.com");
-    provider.setCustomParameters({ prompt: "select_account" });
+    const provider = createMicrosoftOAuthProvider();
 
     try {
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch (e: unknown) {
-      const code =
-        e && typeof e === "object" && "code" in e
-          ? String((e as { code?: string }).code)
-          : undefined;
-      if (process.env.NODE_ENV === "development") {
-        console.error("[auth] signInWithMicrosoft", code, e);
-      }
-      setAuthError(mapFirebaseError(code));
+      const { code, message } = firebaseErrorMeta(e);
+      logAuthError("signInWithRedirect", e);
+      setAuthErrorDetail(formatFirebaseAuthError(e));
+      setAuthError(mapFirebaseError(code, message));
     }
   }, []);
 
@@ -144,11 +195,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = getFirebaseAuth();
     if (!auth) return;
     setAuthError(null);
+    setAuthErrorDetail(null);
     await signOut(auth);
   }, []);
 
   const clearAuthError = useCallback(() => {
     setAuthError(null);
+    setAuthErrorDetail(null);
   }, []);
 
   const value = useMemo(
@@ -156,11 +209,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       authError,
+      authErrorDetail,
       signInWithMicrosoft,
       signOutUser,
       clearAuthError,
     }),
-    [user, loading, authError, signInWithMicrosoft, signOutUser, clearAuthError],
+    [
+      user,
+      loading,
+      authError,
+      authErrorDetail,
+      signInWithMicrosoft,
+      signOutUser,
+      clearAuthError,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

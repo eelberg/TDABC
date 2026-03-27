@@ -19,6 +19,8 @@ export const es = {
     title: "TDABC TVUP",
     subtitle:
       "Inicia sesión con tu cuenta Microsoft 365 autorizada (dominios tvup.media o thechannelstore.tv).",
+    redirectHint:
+      "Al continuar irás a Microsoft y volverás a esta página (inicio de sesión por redirección, más fiable que la ventana emergente).",
     signInMicrosoft: "Iniciar sesión con Microsoft",
     signOut: "Cerrar sesión",
     notConfigured:
@@ -35,6 +37,11 @@ export const es = {
         "El proveedor Microsoft no está habilitado en Firebase (Authentication → Sign-in method → Microsoft).",
       network:
         "Error de red al contactar con Firebase. Comprueba la conexión e inténtalo de nuevo.",
+      invalidCredential:
+        "Microsoft no devolvió un token válido a Firebase. Revisa Application ID y client secret en Firebase; en Entra, URI Web única hacia …firebaseapp.com/__/auth/handler. Si la app es «solo mi organización», define NEXT_PUBLIC_MICROSOFT_TENANT_ID (ID del directorio en Entra) en .env.local y Vercel y vuelve a desplegar.",
+      oauthClientId:
+        "El cliente OAuth de Google Cloud no coincide con este proyecto. En Google Cloud Console (mismo proyecto que Firebase) → APIs y servicios → Credenciales, revisa la clave de API del navegador y el ID de cliente OAuth web.",
+      errorDetailLabel: "Detalle técnico (copia esto si pides ayuda):",
       generic: "No se pudo iniciar sesión. Inténtalo de nuevo.",
       noEmail:
         "No se pudo obtener el correo de la cuenta. Usa una cuenta Microsoft 365 con correo corporativo.",

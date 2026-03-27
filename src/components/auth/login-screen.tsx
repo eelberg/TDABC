@@ -27,6 +27,10 @@ function errorMessage(code: AuthErrorCode): string | null {
       return es.auth.errors.operationNotAllowed;
     case "network":
       return es.auth.errors.network;
+    case "invalid_credential":
+      return es.auth.errors.invalidCredential;
+    case "oauth_client_id":
+      return es.auth.errors.oauthClientId;
     case "no_email":
       return es.auth.errors.noEmail;
     case "generic":
@@ -37,7 +41,7 @@ function errorMessage(code: AuthErrorCode): string | null {
 }
 
 export function LoginScreen() {
-  const { signInWithMicrosoft, authError, clearAuthError } = useAuth();
+  const { signInWithMicrosoft, authError, authErrorDetail, clearAuthError } = useAuth();
   const err = errorMessage(authError);
 
   return (
@@ -51,13 +55,22 @@ export function LoginScreen() {
           <CardDescription className="text-pretty">{es.auth.subtitle}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <p className="text-center text-xs text-muted-foreground">{es.auth.redirectHint}</p>
           {err ? (
-            <p
+            <div
               role="alert"
-              className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+              className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
             >
-              {err}
-            </p>
+              <p>{err}</p>
+              {authErrorDetail ? (
+                <div className="border-t border-destructive/20 pt-2 text-xs font-normal text-destructive/90">
+                  <p className="mb-1 font-medium">{es.auth.errors.errorDetailLabel}</p>
+                  <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono opacity-95">
+                    {authErrorDetail}
+                  </pre>
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <Button
             type="button"
