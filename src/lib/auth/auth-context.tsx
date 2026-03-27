@@ -20,7 +20,7 @@ import {
 import { isEmailDomainAllowed } from "@/lib/auth/allowed-domains";
 import { createMicrosoftOAuthProvider } from "@/lib/auth/microsoft-provider";
 import { formatFirebaseAuthError } from "@/lib/auth/firebase-auth-error";
-import { resolveSignInEmail } from "@/lib/auth/user-email";
+import { resolveSignInEmailAsync } from "@/lib/auth/user-email";
 import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase/client";
 
 export type AuthErrorCode =
@@ -116,8 +116,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    let unsubscribe: (() => void) | undefined;
     let cancelled = false;
+
+    const unsubscribe = onAuthStateChanged(auth, async (next) => {
+      if (cancelled) return;
+
+      if (next) {
+        const email = await resolveSignInEmailAsync(next);
+        if (!email) {
+          console.warn("[auth] Sin email tras OAuth; revisa claims Microsoft / perfil.");
+          await signOut(auth);
+          if (!cancelled) {
+            setUser(null);
+            setAuthError("no_email");
+            setLoading(false);
+          }
+          return;
+        }
+        if (!isEmailDomainAllowed(email)) {
+          await signOut(auth);
+          if (!cancelled) {
+            setUser(null);
+            setAuthError("domain");
+            setLoading(false);
+          }
+          return;
+        }
+      }
+
+      if (!cancelled) {
+        setUser(next);
+        setLoading(false);
+      }
+    });
 
     void (async () => {
       try {
@@ -134,35 +165,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthError(mapFirebaseError(code, message));
         }
       }
-
-      if (cancelled) return;
-
-      unsubscribe = onAuthStateChanged(auth, async (next) => {
-        if (next) {
-          const email = resolveSignInEmail(next);
-          if (!email) {
-            await signOut(auth);
-            setUser(null);
-            setAuthError("no_email");
-            setLoading(false);
-            return;
-          }
-          if (!isEmailDomainAllowed(email)) {
-            await signOut(auth);
-            setUser(null);
-            setAuthError("domain");
-            setLoading(false);
-            return;
-          }
-        }
-        setUser(next);
-        setLoading(false);
-      });
     })();
 
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      unsubscribe();
     };
   }, [firebaseReady]);
 
