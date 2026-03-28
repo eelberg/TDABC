@@ -1,6 +1,7 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import {
   browserLocalPersistence,
+  browserPopupRedirectResolver,
   getAuth,
   initializeAuth,
   type Auth,
@@ -37,9 +38,9 @@ export function getFirebaseApp(): FirebaseApp | null {
 }
 
 /**
- * Persistencia en IndexedDB desde la creación de Auth. Si se usa `getAuth` + `setPersistence`
- * en un efecto asíncrono, el primer `getRedirectResult` puede ejecutarse antes y no guardar sesión
- * (firebaseLocalStorage vacío → bucle de login).
+ * Persistencia en IndexedDB desde la creación de Auth. Con `initializeAuth` hay que pasar
+ * `browserPopupRedirectResolver`; si no, `signInWithRedirect` / `getRedirectResult` fallan con
+ * `auth/argument-error` (`getAuth` lo inyecta por defecto).
  */
 export function getFirebaseAuth(): Auth | null {
   const app = getFirebaseApp();
@@ -51,7 +52,10 @@ export function getFirebaseAuth(): Auth | null {
   }
 
   try {
-    cachedAuth = initializeAuth(app, { persistence: browserLocalPersistence });
+    cachedAuth = initializeAuth(app, {
+      persistence: browserLocalPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
   } catch (e: unknown) {
     const code =
       e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "";
