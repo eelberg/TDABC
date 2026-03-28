@@ -11,11 +11,12 @@ import {
 } from "react";
 import {
   getAdditionalUserInfo,
-  getRedirectResult,
   onAuthStateChanged,
+  signInWithPopup,
   signInWithRedirect,
   signOut,
   type User,
+  type UserCredential,
 } from "firebase/auth";
 
 import { isEmailDomainAllowed } from "@/lib/auth/allowed-domains";
@@ -27,6 +28,7 @@ import {
   getFirebaseAuth,
   isFirebaseConfigured,
 } from "@/lib/firebase/client";
+import { consumeGetRedirectResult } from "@/lib/firebase/redirect-result";
 
 export type AuthErrorCode =
   | "domain"
@@ -49,6 +51,7 @@ type AuthContextValue = {
   /** Mensaje crudo de Firebase (código + texto); copiar al informar incidencias. */
   authErrorDetail: string | null;
   signInWithMicrosoft: () => Promise<void>;
+  signInWithMicrosoftPopup: () => Promise<void>;
   signOutUser: () => Promise<void>;
   clearAuthError: () => void;
 };
@@ -97,11 +100,6 @@ function logAuthError(context: string, e: unknown) {
   console.error(`[auth] ${context}`, code ?? "(no code)", message ?? e);
 }
 
-type PendingIdpProfile = {
-  uid: string;
-  profile: Record<string, unknown> | null;
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const firebaseReady = isFirebaseConfigured();
 
@@ -127,93 +125,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
     let authEventSeq = 0;
 
-    void (async () => {
-      let pendingIdp: PendingIdpProfile | null = null;
+    const unsubscribe = onAuthStateChanged(auth, async (next) => {
+      if (cancelled) return;
+      const seq = ++authEventSeq;
+      const eventUid = next?.uid ?? null;
 
+      let redirectResult: UserCredential | null = null;
       try {
-        const result = await getRedirectResult(auth, browserPopupRedirectResolver);
-        if (cancelled) return;
-        if (result) {
-          const extra = getAdditionalUserInfo(result);
-          pendingIdp = {
-            uid: result.user.uid,
-            profile: extra?.profile ?? null,
-          };
-        }
-        setAuthErrorDetail(null);
-        setAuthError(null);
+        redirectResult = await consumeGetRedirectResult(auth);
       } catch (e) {
         if (!cancelled) {
           const { code, message } = firebaseErrorMeta(e);
           logAuthError("getRedirectResult", e);
           setAuthErrorDetail(formatFirebaseAuthError(e));
           setAuthError(mapFirebaseError(code, message));
+          setLoading(false);
         }
+        return;
       }
 
       if (cancelled) return;
 
-      unsubscribe = onAuthStateChanged(auth, async (next) => {
-        if (cancelled) return;
-        const seq = ++authEventSeq;
-        const eventUid = next?.uid ?? null;
+      if (!next) {
+        if (seq !== authEventSeq) return;
+        setUser(null);
+        setLoading(false);
+        return;
+      }
 
-        if (!next) {
-          pendingIdp = null;
-          if (seq !== authEventSeq || cancelled) return;
+      let idpProfile: Record<string, unknown> | null | undefined;
+      if (redirectResult && redirectResult.user.uid === next.uid) {
+        const extra = getAdditionalUserInfo(redirectResult);
+        idpProfile = extra?.profile ?? null;
+      }
+
+      const email = await resolveSignInEmailWithRetries(next, { idpProfile });
+
+      if (cancelled) return;
+      if (authEventSeq !== seq && auth.currentUser?.uid !== eventUid) return;
+
+      if (!email) {
+        console.warn("[auth] Sin email tras OAuth; revisa claims Microsoft / perfil.");
+        await signOut(auth);
+        if (!cancelled && auth.currentUser === null) {
           setUser(null);
-          setLoading(false);
-          return;
-        }
-
-        let idpProfile: Record<string, unknown> | null | undefined;
-        if (pendingIdp && next.uid === pendingIdp.uid) {
-          idpProfile = pendingIdp.profile;
-        }
-
-        const email = await resolveSignInEmailWithRetries(next, { idpProfile });
-
-        if (cancelled) return;
-        // Ignorar solo si hubo un evento más nuevo *de otro usuario*; varias emisiones del mismo uid son normales.
-        if (authEventSeq !== seq && auth.currentUser?.uid !== eventUid) return;
-
-        if (pendingIdp && next.uid === pendingIdp.uid) {
-          pendingIdp = null;
-        }
-
-        if (!email) {
-          console.warn("[auth] Sin email tras OAuth; revisa claims Microsoft / perfil.");
-          await signOut(auth);
-          if (!cancelled && auth.currentUser === null) {
-            setUser(null);
-            setAuthError("no_email");
-            setLoading(false);
-          }
-          return;
-        }
-        if (!isEmailDomainAllowed(email)) {
-          await signOut(auth);
-          if (!cancelled && auth.currentUser === null) {
-            setUser(null);
-            setAuthError("domain");
-            setLoading(false);
-          }
-          return;
-        }
-
-        if (!cancelled && auth.currentUser?.uid === next.uid) {
-          setUser(next);
+          setAuthError("no_email");
           setLoading(false);
         }
-      });
-    })();
+        return;
+      }
+      if (!isEmailDomainAllowed(email)) {
+        await signOut(auth);
+        if (!cancelled && auth.currentUser === null) {
+          setUser(null);
+          setAuthError("domain");
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (!cancelled && auth.currentUser?.uid === next.uid) {
+        setAuthError(null);
+        setAuthErrorDetail(null);
+        setUser(next);
+        setLoading(false);
+      }
+    });
 
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      unsubscribe();
     };
   }, [firebaseReady]);
 
@@ -242,6 +225,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signInWithMicrosoftPopup = useCallback(async () => {
+    setAuthError(null);
+    setAuthErrorDetail(null);
+    if (!isFirebaseConfigured()) {
+      setAuthError("not_configured");
+      return;
+    }
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      setAuthError("not_configured");
+      return;
+    }
+
+    const provider = createMicrosoftOAuthProvider();
+
+    try {
+      await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+    } catch (e: unknown) {
+      const { code, message } = firebaseErrorMeta(e);
+      logAuthError("signInWithPopup", e);
+      setAuthErrorDetail(formatFirebaseAuthError(e));
+      setAuthError(mapFirebaseError(code, message));
+    }
+  }, []);
+
   const signOutUser = useCallback(async () => {
     const auth = getFirebaseAuth();
     if (!auth) return;
@@ -262,6 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authError,
       authErrorDetail,
       signInWithMicrosoft,
+      signInWithMicrosoftPopup,
       signOutUser,
       clearAuthError,
     }),
@@ -271,6 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authError,
       authErrorDetail,
       signInWithMicrosoft,
+      signInWithMicrosoftPopup,
       signOutUser,
       clearAuthError,
     ],
