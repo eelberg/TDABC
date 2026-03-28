@@ -22,7 +22,11 @@ import { isEmailDomainAllowed } from "@/lib/auth/allowed-domains";
 import { createMicrosoftOAuthProvider } from "@/lib/auth/microsoft-provider";
 import { formatFirebaseAuthError } from "@/lib/auth/firebase-auth-error";
 import { resolveSignInEmailWithRetries } from "@/lib/auth/user-email";
-import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase/client";
+import {
+  browserPopupRedirectResolver,
+  getFirebaseAuth,
+  isFirebaseConfigured,
+} from "@/lib/firebase/client";
 
 export type AuthErrorCode =
   | "domain"
@@ -130,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let pendingIdp: PendingIdpProfile | null = null;
 
       try {
-        const result = await getRedirectResult(auth);
+        const result = await getRedirectResult(auth, browserPopupRedirectResolver);
         if (cancelled) return;
         if (result) {
           const extra = getAdditionalUserInfo(result);
@@ -155,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribe = onAuthStateChanged(auth, async (next) => {
         if (cancelled) return;
         const seq = ++authEventSeq;
+        const eventUid = next?.uid ?? null;
 
         if (!next) {
           pendingIdp = null;
@@ -171,7 +176,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const email = await resolveSignInEmailWithRetries(next, { idpProfile });
 
-        if (seq !== authEventSeq || cancelled) return;
+        if (cancelled) return;
+        // Ignorar solo si hubo un evento más nuevo *de otro usuario*; varias emisiones del mismo uid son normales.
+        if (authEventSeq !== seq && auth.currentUser?.uid !== eventUid) return;
 
         if (pendingIdp && next.uid === pendingIdp.uid) {
           pendingIdp = null;
@@ -180,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!email) {
           console.warn("[auth] Sin email tras OAuth; revisa claims Microsoft / perfil.");
           await signOut(auth);
-          if (!cancelled && seq === authEventSeq) {
+          if (!cancelled && auth.currentUser === null) {
             setUser(null);
             setAuthError("no_email");
             setLoading(false);
@@ -189,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         if (!isEmailDomainAllowed(email)) {
           await signOut(auth);
-          if (!cancelled && seq === authEventSeq) {
+          if (!cancelled && auth.currentUser === null) {
             setUser(null);
             setAuthError("domain");
             setLoading(false);
@@ -197,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (!cancelled && seq === authEventSeq) {
+        if (!cancelled && auth.currentUser?.uid === next.uid) {
           setUser(next);
           setLoading(false);
         }
@@ -226,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const provider = createMicrosoftOAuthProvider();
 
     try {
-      await signInWithRedirect(auth, provider);
+      await signInWithRedirect(auth, provider, browserPopupRedirectResolver);
     } catch (e: unknown) {
       const { code, message } = firebaseErrorMeta(e);
       logAuthError("signInWithRedirect", e);

@@ -68,3 +68,6 @@ export function getFirebaseAuth(): Auth | null {
   cachedAuthAppName = appName;
   return cachedAuth;
 }
+
+/** Mismo resolver que `initializeAuth`; pasarlo explícito a redirect evita fallos silenciosos en algunos entornos. */
+export { browserPopupRedirectResolver };
