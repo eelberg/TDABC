@@ -5,17 +5,18 @@ import {
   type UserCredential,
 } from "firebase/auth";
 
-let inFlight: Promise<UserCredential | null> | null = null;
+let cached: Promise<UserCredential | null> | null = null;
 
 /**
- * Una sola llamada a `getRedirectResult` por oleada de redirección. Varios `await` comparten la misma
- * promesa (Strict Mode, doble montaje) y tras resolver se puede volver a llamar en la misma página.
+ * Una sola promesa de `getRedirectResult` por carga de página. No resetear tras resolver: un segundo
+ * `getRedirectResult` en la misma carga devolvería null (URL ya consumida) y rompería el flujo.
  */
 export function consumeGetRedirectResult(auth: Auth): Promise<UserCredential | null> {
-  if (!inFlight) {
-    inFlight = getRedirectResult(auth, browserPopupRedirectResolver).finally(() => {
-      inFlight = null;
+  if (!cached) {
+    cached = getRedirectResult(auth, browserPopupRedirectResolver).catch((e) => {
+      cached = null;
+      throw e;
     });
   }
-  return inFlight;
+  return cached;
 }

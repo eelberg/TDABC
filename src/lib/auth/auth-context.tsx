@@ -130,7 +130,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (next) => {
       if (cancelled) return;
       const seq = ++authEventSeq;
-      const eventUid = next?.uid ?? null;
 
       let redirectResult: UserCredential | null = null;
       try {
@@ -148,20 +147,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (cancelled) return;
 
-      if (!next) {
+      // Tras volver del redirect, el primer callback puede ser `null` mientras `getRedirectResult`
+      // ya aplicó la sesión: no forzar logout o una segunda emisión pierde la carrera y quedas en login.
+      let effective: User | null = next;
+      if (!effective && auth.currentUser) {
+        effective = auth.currentUser;
+      }
+
+      if (!effective) {
         if (seq !== authEventSeq) return;
         setUser(null);
         setLoading(false);
         return;
       }
 
+      const eventUid = effective.uid;
+
       let idpProfile: Record<string, unknown> | null | undefined;
-      if (redirectResult && redirectResult.user.uid === next.uid) {
+      if (redirectResult && redirectResult.user.uid === effective.uid) {
         const extra = getAdditionalUserInfo(redirectResult);
         idpProfile = extra?.profile ?? null;
       }
 
-      const email = await resolveSignInEmailWithRetries(next, { idpProfile });
+      const email = await resolveSignInEmailWithRetries(effective, { idpProfile });
 
       if (cancelled) return;
       if (authEventSeq !== seq && auth.currentUser?.uid !== eventUid) return;
@@ -186,10 +194,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (!cancelled && auth.currentUser?.uid === next.uid) {
+      if (!cancelled && auth.currentUser?.uid === effective.uid) {
         setAuthError(null);
         setAuthErrorDetail(null);
-        setUser(next);
+        setUser(effective);
         setLoading(false);
       }
     });
