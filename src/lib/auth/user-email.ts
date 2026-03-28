@@ -116,3 +116,27 @@ export async function resolveSignInEmailAsync(
     return null;
   }
 }
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/** Esperas tras OAuth: el perfil/token a veces tarda en rellenar `email`. */
+const EMAIL_RESOLVE_RETRY_MS = [0, 300, 700, 1500] as const;
+
+export async function resolveSignInEmailWithRetries(
+  user: User,
+  options?: ResolveSignInEmailOptions,
+): Promise<string | null> {
+  for (let i = 0; i < EMAIL_RESOLVE_RETRY_MS.length; i++) {
+    const wait = EMAIL_RESOLVE_RETRY_MS[i];
+    if (wait > 0) {
+      await delay(wait);
+    }
+    const email = await resolveSignInEmailAsync(user, options);
+    if (email) return email;
+  }
+  return null;
+}

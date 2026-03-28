@@ -10,11 +10,9 @@ import {
   type ReactNode,
 } from "react";
 import {
-  browserLocalPersistence,
   getAdditionalUserInfo,
   getRedirectResult,
   onAuthStateChanged,
-  setPersistence,
   signInWithRedirect,
   signOut,
   type User,
@@ -23,7 +21,7 @@ import {
 import { isEmailDomainAllowed } from "@/lib/auth/allowed-domains";
 import { createMicrosoftOAuthProvider } from "@/lib/auth/microsoft-provider";
 import { formatFirebaseAuthError } from "@/lib/auth/firebase-auth-error";
-import { resolveSignInEmailAsync } from "@/lib/auth/user-email";
+import { resolveSignInEmailWithRetries } from "@/lib/auth/user-email";
 import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase/client";
 
 export type AuthErrorCode =
@@ -126,15 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
+    let authEventSeq = 0;
 
     void (async () => {
-      try {
-        await setPersistence(auth, browserLocalPersistence);
-      } catch (e) {
-        logAuthError("setPersistence", e);
-      }
-      if (cancelled) return;
-
       let pendingIdp: PendingIdpProfile | null = null;
 
       try {
@@ -162,37 +154,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       unsubscribe = onAuthStateChanged(auth, async (next) => {
         if (cancelled) return;
+        const seq = ++authEventSeq;
+
+        if (!next) {
+          pendingIdp = null;
+          if (seq !== authEventSeq || cancelled) return;
+          setUser(null);
+          setLoading(false);
+          return;
+        }
 
         let idpProfile: Record<string, unknown> | null | undefined;
-        if (pendingIdp && next && next.uid === pendingIdp.uid) {
+        if (pendingIdp && next.uid === pendingIdp.uid) {
           idpProfile = pendingIdp.profile;
+        }
+
+        const email = await resolveSignInEmailWithRetries(next, { idpProfile });
+
+        if (seq !== authEventSeq || cancelled) return;
+
+        if (pendingIdp && next.uid === pendingIdp.uid) {
           pendingIdp = null;
         }
 
-        if (next) {
-          const email = await resolveSignInEmailAsync(next, { idpProfile });
-          if (!email) {
-            console.warn("[auth] Sin email tras OAuth; revisa claims Microsoft / perfil.");
-            await signOut(auth);
-            if (!cancelled) {
-              setUser(null);
-              setAuthError("no_email");
-              setLoading(false);
-            }
-            return;
+        if (!email) {
+          console.warn("[auth] Sin email tras OAuth; revisa claims Microsoft / perfil.");
+          await signOut(auth);
+          if (!cancelled && seq === authEventSeq) {
+            setUser(null);
+            setAuthError("no_email");
+            setLoading(false);
           }
-          if (!isEmailDomainAllowed(email)) {
-            await signOut(auth);
-            if (!cancelled) {
-              setUser(null);
-              setAuthError("domain");
-              setLoading(false);
-            }
-            return;
+          return;
+        }
+        if (!isEmailDomainAllowed(email)) {
+          await signOut(auth);
+          if (!cancelled && seq === authEventSeq) {
+            setUser(null);
+            setAuthError("domain");
+            setLoading(false);
           }
+          return;
         }
 
-        if (!cancelled) {
+        if (!cancelled && seq === authEventSeq) {
           setUser(next);
           setLoading(false);
         }
@@ -216,12 +221,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) {
       setAuthError("not_configured");
       return;
-    }
-
-    try {
-      await setPersistence(auth, browserLocalPersistence);
-    } catch (e) {
-      logAuthError("setPersistence (signIn)", e);
     }
 
     const provider = createMicrosoftOAuthProvider();
