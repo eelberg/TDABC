@@ -31,7 +31,7 @@ Abre [http://localhost:3000](http://localhost:3000). Sin variables de Firebase, 
 
 **Dominios de correo permitidos** (tras el login, la app valida el email): `tvup.media` y `thechannelstore.tv`. La lógica está en [`src/lib/auth/allowed-domains.ts`](src/lib/auth/allowed-domains.ts).
 
-El inicio de sesión usa **redirección completa** (`signInWithRedirect`), no ventana emergente, para evitar problemas con políticas del navegador (p. ej. COOP) en producción.
+El inicio de sesión usa **ventana emergente** (`signInWithPopup`): en muchos entornos corporativos el flujo por redirección pierde el estado en el navegador y no termina la sesión en Firebase.
 
 **Entra: una sola plataforma Web** — Microsoft **no permite** registrar la misma URI como Web y SPA a la vez. Es correcto dejar **solo Web** con `https://<project-id>.firebaseapp.com/__/auth/handler`. Los checkboxes de *implicit grant* (ID tokens) **no suelen ser necesarios** para Firebase; puedes dejarlos desmarcados.
 

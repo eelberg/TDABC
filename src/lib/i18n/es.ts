@@ -19,12 +19,9 @@ export const es = {
     title: "TDABC TVUP",
     subtitle:
       "Inicia sesión con tu cuenta Microsoft 365 autorizada (dominios tvup.media o thechannelstore.tv).",
-    redirectHint:
-      "Al continuar irás a Microsoft y volverás a esta página (inicio de sesión por redirección, más fiable que la ventana emergente).",
-    popupFallbackHint:
-      "Si tras iniciar sesión vuelves aquí sin entrar, prueba la ventana emergente (evita problemas con el almacenamiento del redirect).",
+    signInHint:
+      "Se abrirá una ventana de Microsoft; permite ventanas emergentes para este sitio si el navegador las bloquea.",
     signInMicrosoft: "Iniciar sesión con Microsoft",
-    signInMicrosoftPopup: "Iniciar sesión (ventana emergente)",
     signOut: "Cerrar sesión",
     notConfigured:
       "Firebase no está configurado. Añade las variables NEXT_PUBLIC_FIREBASE_* en .env.local (consulta .env.example).",

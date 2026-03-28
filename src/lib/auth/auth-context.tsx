@@ -13,7 +13,6 @@ import {
   getAdditionalUserInfo,
   onAuthStateChanged,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
   type User,
   type UserCredential,
@@ -51,7 +50,6 @@ type AuthContextValue = {
   /** Mensaje crudo de Firebase (código + texto); copiar al informar incidencias. */
   authErrorDetail: string | null;
   signInWithMicrosoft: () => Promise<void>;
-  signInWithMicrosoftPopup: () => Promise<void>;
   signOutUser: () => Promise<void>;
   clearAuthError: () => void;
 };
@@ -224,31 +222,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const provider = createMicrosoftOAuthProvider();
 
     try {
-      await signInWithRedirect(auth, provider, browserPopupRedirectResolver);
-    } catch (e: unknown) {
-      const { code, message } = firebaseErrorMeta(e);
-      logAuthError("signInWithRedirect", e);
-      setAuthErrorDetail(formatFirebaseAuthError(e));
-      setAuthError(mapFirebaseError(code, message));
-    }
-  }, []);
-
-  const signInWithMicrosoftPopup = useCallback(async () => {
-    setAuthError(null);
-    setAuthErrorDetail(null);
-    if (!isFirebaseConfigured()) {
-      setAuthError("not_configured");
-      return;
-    }
-    const auth = getFirebaseAuth();
-    if (!auth) {
-      setAuthError("not_configured");
-      return;
-    }
-
-    const provider = createMicrosoftOAuthProvider();
-
-    try {
       await signInWithPopup(auth, provider, browserPopupRedirectResolver);
     } catch (e: unknown) {
       const { code, message } = firebaseErrorMeta(e);
@@ -278,7 +251,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authError,
       authErrorDetail,
       signInWithMicrosoft,
-      signInWithMicrosoftPopup,
       signOutUser,
       clearAuthError,
     }),
@@ -288,7 +260,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authError,
       authErrorDetail,
       signInWithMicrosoft,
-      signInWithMicrosoftPopup,
       signOutUser,
       clearAuthError,
     ],

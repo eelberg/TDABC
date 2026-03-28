@@ -41,13 +41,7 @@ function errorMessage(code: AuthErrorCode): string | null {
 }
 
 export function LoginScreen() {
-  const {
-    signInWithMicrosoft,
-    signInWithMicrosoftPopup,
-    authError,
-    authErrorDetail,
-    clearAuthError,
-  } = useAuth();
+  const { signInWithMicrosoft, authError, authErrorDetail, clearAuthError } = useAuth();
   const err = errorMessage(authError);
 
   return (
@@ -61,8 +55,7 @@ export function LoginScreen() {
           <CardDescription className="text-pretty">{es.auth.subtitle}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <p className="text-center text-xs text-muted-foreground">{es.auth.redirectHint}</p>
-          <p className="text-center text-xs text-muted-foreground">{es.auth.popupFallbackHint}</p>
+          <p className="text-center text-xs text-muted-foreground">{es.auth.signInHint}</p>
           {err ? (
             <div
               role="alert"
@@ -88,17 +81,6 @@ export function LoginScreen() {
             }}
           >
             {es.auth.signInMicrosoft}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={() => {
-              clearAuthError();
-              void signInWithMicrosoftPopup();
-            }}
-          >
-            {es.auth.signInMicrosoftPopup}
           </Button>
         </CardContent>
       </Card>
